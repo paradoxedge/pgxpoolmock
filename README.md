@@ -1,12 +1,14 @@
 ### PGX POOL MOCK
 
+THIS IS A FORK of github.com/driftprogramming/pgxpoolmock! MANY THANKS to the original authors.
+
 This repo is mock `pgxpool` in https://github.com/jackc/pgx. so that you can test your data access code locally, no real database is needed.
 I also strongly recommend you use `pgxpool` rather than `pgx` only. see https://github.com/jackc/pgx/tree/master/pgxpool
 
 ### How to install
 
 ```
-go get -u github.com/driftprogramming/pgxpoolmock
+go get -u github.com/edbmanniwood/pgxpoolmock
 ```
 
 ### How to Use
@@ -18,8 +20,8 @@ package pgxpoolmock_test
 import (
 	"testing"
 
-	"github.com/driftprogramming/pgxpoolmock"
-	"github.com/driftprogramming/pgxpoolmock/testdata"
+	"github.com/edbmanniwood/pgxpoolmock"
+	"github.com/edbmanniwood/pgxpoolmock/testdata"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )
