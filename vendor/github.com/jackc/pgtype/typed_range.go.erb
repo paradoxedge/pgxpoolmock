@@ -18,10 +18,27 @@ type <%= range_type %> struct {
 }
 
 func (dst *<%= range_type %>) Set(src interface{}) error {
-	return errors.Errorf("cannot convert %v to <%= range_type %>", src)
+	// untyped nil and typed nil interfaces are different
+	if src == nil {
+		*dst = <%= range_type %>{Status: Null}
+		return nil
+	}
+
+	switch value := src.(type) {
+	case <%= range_type %>:
+		*dst = value
+	case *<%= range_type %>:
+		*dst = *value
+	case string:
+		return dst.DecodeText(nil, []byte(value))
+	default:
+		return fmt.Errorf("cannot convert %v to <%= range_type %>", src)
+	}
+
+	return nil
 }
 
-func (dst *<%= range_type %>) Get() interface{} {
+func (dst <%= range_type %>) Get() interface{} {
 	switch dst.Status {
 	case Present:
 		return dst
@@ -33,7 +50,7 @@ func (dst *<%= range_type %>) Get() interface{} {
 }
 
 func (src *<%= range_type %>) AssignTo(dst interface{}) error {
-	return errors.Errorf("cannot assign %v to %T", src, dst)
+	return fmt.Errorf("cannot assign %v to %T", src, dst)
 }
 
 func (dst *<%= range_type %>) DecodeText(ci *ConnInfo, src []byte) error {
@@ -122,7 +139,7 @@ func (src <%= range_type %>) EncodeText(ci *ConnInfo, buf []byte) ([]byte, error
 	case Empty:
 		return append(buf, "empty"...), nil
 	default:
-		return nil, errors.Errorf("unknown lower bound type %v", src.LowerType)
+		return nil, fmt.Errorf("unknown lower bound type %v", src.LowerType)
 	}
 
 	var err error
@@ -132,7 +149,7 @@ func (src <%= range_type %>) EncodeText(ci *ConnInfo, buf []byte) ([]byte, error
 		if err != nil {
 			return nil, err
 		} else if buf == nil {
-			return nil, errors.Errorf("Lower cannot be null unless LowerType is Unbounded")
+			return nil, fmt.Errorf("Lower cannot be null unless LowerType is Unbounded")
 		}
 	}
 
@@ -143,7 +160,7 @@ func (src <%= range_type %>) EncodeText(ci *ConnInfo, buf []byte) ([]byte, error
 		if err != nil {
 			return nil, err
 		} else if buf == nil {
-			return nil, errors.Errorf("Upper cannot be null unless UpperType is Unbounded")
+			return nil, fmt.Errorf("Upper cannot be null unless UpperType is Unbounded")
 		}
 	}
 
@@ -153,7 +170,7 @@ func (src <%= range_type %>) EncodeText(ci *ConnInfo, buf []byte) ([]byte, error
 	case Inclusive:
 		buf = append(buf, ']')
 	default:
-		return nil, errors.Errorf("unknown upper bound type %v", src.UpperType)
+		return nil, fmt.Errorf("unknown upper bound type %v", src.UpperType)
 	}
 
 	return buf, nil
@@ -177,7 +194,7 @@ func (src <%= range_type %>) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, err
 	case Empty:
 		return append(buf, emptyMask), nil
 	default:
-		return nil, errors.Errorf("unknown LowerType: %v", src.LowerType)
+		return nil, fmt.Errorf("unknown LowerType: %v", src.LowerType)
 	}
 
 	switch src.UpperType {
@@ -187,7 +204,7 @@ func (src <%= range_type %>) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, err
 		rangeType |= upperUnboundedMask
 	case Exclusive:
 	default:
-		return nil, errors.Errorf("unknown UpperType: %v", src.UpperType)
+		return nil, fmt.Errorf("unknown UpperType: %v", src.UpperType)
 	}
 
 	buf = append(buf, rangeType)
@@ -203,7 +220,7 @@ func (src <%= range_type %>) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, err
 			return nil, err
 		}
 		if buf == nil {
-			return nil, errors.Errorf("Lower cannot be null unless LowerType is Unbounded")
+			return nil, fmt.Errorf("Lower cannot be null unless LowerType is Unbounded")
 		}
 
 		pgio.SetInt32(buf[sp:], int32(len(buf[sp:])-4))
@@ -218,7 +235,7 @@ func (src <%= range_type %>) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, err
 			return nil, err
 		}
 		if buf == nil {
-			return nil, errors.Errorf("Upper cannot be null unless UpperType is Unbounded")
+			return nil, fmt.Errorf("Upper cannot be null unless UpperType is Unbounded")
 		}
 
 		pgio.SetInt32(buf[sp:], int32(len(buf[sp:])-4))
@@ -243,7 +260,7 @@ func (dst *<%= range_type %>) Scan(src interface{}) error {
 		return dst.DecodeText(nil, srcCopy)
 	}
 
-	return errors.Errorf("cannot scan %T", src)
+	return fmt.Errorf("cannot scan %T", src)
 }
 
 // Value implements the database/sql/driver Valuer interface.

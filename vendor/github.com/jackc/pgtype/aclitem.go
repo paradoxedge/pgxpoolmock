@@ -2,8 +2,7 @@ package pgtype
 
 import (
 	"database/sql/driver"
-
-	errors "golang.org/x/xerrors"
+	"fmt"
 )
 
 // ACLItem is used for PostgreSQL's aclitem data type. A sample aclitem
@@ -24,6 +23,18 @@ type ACLItem struct {
 }
 
 func (dst *ACLItem) Set(src interface{}) error {
+	if src == nil {
+		*dst = ACLItem{Status: Null}
+		return nil
+	}
+
+	if value, ok := src.(interface{ Get() interface{} }); ok {
+		value2 := value.Get()
+		if value2 != value {
+			return dst.Set(value2)
+		}
+	}
+
 	switch value := src.(type) {
 	case string:
 		*dst = ACLItem{String: value, Status: Present}
@@ -37,13 +48,13 @@ func (dst *ACLItem) Set(src interface{}) error {
 		if originalSrc, ok := underlyingStringType(src); ok {
 			return dst.Set(originalSrc)
 		}
-		return errors.Errorf("cannot convert %v to ACLItem", value)
+		return fmt.Errorf("cannot convert %v to ACLItem", value)
 	}
 
 	return nil
 }
 
-func (dst *ACLItem) Get() interface{} {
+func (dst ACLItem) Get() interface{} {
 	switch dst.Status {
 	case Present:
 		return dst.String
@@ -65,13 +76,13 @@ func (src *ACLItem) AssignTo(dst interface{}) error {
 			if nextDst, retry := GetAssignToDstType(dst); retry {
 				return src.AssignTo(nextDst)
 			}
-			return errors.Errorf("unable to assign to %T", dst)
+			return fmt.Errorf("unable to assign to %T", dst)
 		}
 	case Null:
 		return NullAssignTo(dst)
 	}
 
-	return errors.Errorf("cannot decode %#v into %T", src, dst)
+	return fmt.Errorf("cannot decode %#v into %T", src, dst)
 }
 
 func (dst *ACLItem) DecodeText(ci *ConnInfo, src []byte) error {
@@ -111,7 +122,7 @@ func (dst *ACLItem) Scan(src interface{}) error {
 		return dst.DecodeText(nil, srcCopy)
 	}
 
-	return errors.Errorf("cannot scan %T", src)
+	return fmt.Errorf("cannot scan %T", src)
 }
 
 // Value implements the database/sql/driver Valuer interface.

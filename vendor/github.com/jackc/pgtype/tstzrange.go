@@ -2,9 +2,9 @@ package pgtype
 
 import (
 	"database/sql/driver"
+	"fmt"
 
 	"github.com/jackc/pgio"
-	errors "golang.org/x/xerrors"
 )
 
 type Tstzrange struct {
@@ -16,10 +16,27 @@ type Tstzrange struct {
 }
 
 func (dst *Tstzrange) Set(src interface{}) error {
-	return errors.Errorf("cannot convert %v to Tstzrange", src)
+	// untyped nil and typed nil interfaces are different
+	if src == nil {
+		*dst = Tstzrange{Status: Null}
+		return nil
+	}
+
+	switch value := src.(type) {
+	case Tstzrange:
+		*dst = value
+	case *Tstzrange:
+		*dst = *value
+	case string:
+		return dst.DecodeText(nil, []byte(value))
+	default:
+		return fmt.Errorf("cannot convert %v to Tstzrange", src)
+	}
+
+	return nil
 }
 
-func (dst *Tstzrange) Get() interface{} {
+func (dst Tstzrange) Get() interface{} {
 	switch dst.Status {
 	case Present:
 		return dst
@@ -31,7 +48,7 @@ func (dst *Tstzrange) Get() interface{} {
 }
 
 func (src *Tstzrange) AssignTo(dst interface{}) error {
-	return errors.Errorf("cannot assign %v to %T", src, dst)
+	return fmt.Errorf("cannot assign %v to %T", src, dst)
 }
 
 func (dst *Tstzrange) DecodeText(ci *ConnInfo, src []byte) error {
@@ -120,7 +137,7 @@ func (src Tstzrange) EncodeText(ci *ConnInfo, buf []byte) ([]byte, error) {
 	case Empty:
 		return append(buf, "empty"...), nil
 	default:
-		return nil, errors.Errorf("unknown lower bound type %v", src.LowerType)
+		return nil, fmt.Errorf("unknown lower bound type %v", src.LowerType)
 	}
 
 	var err error
@@ -130,7 +147,7 @@ func (src Tstzrange) EncodeText(ci *ConnInfo, buf []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		} else if buf == nil {
-			return nil, errors.Errorf("Lower cannot be null unless LowerType is Unbounded")
+			return nil, fmt.Errorf("Lower cannot be null unless LowerType is Unbounded")
 		}
 	}
 
@@ -141,7 +158,7 @@ func (src Tstzrange) EncodeText(ci *ConnInfo, buf []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		} else if buf == nil {
-			return nil, errors.Errorf("Upper cannot be null unless UpperType is Unbounded")
+			return nil, fmt.Errorf("Upper cannot be null unless UpperType is Unbounded")
 		}
 	}
 
@@ -151,7 +168,7 @@ func (src Tstzrange) EncodeText(ci *ConnInfo, buf []byte) ([]byte, error) {
 	case Inclusive:
 		buf = append(buf, ']')
 	default:
-		return nil, errors.Errorf("unknown upper bound type %v", src.UpperType)
+		return nil, fmt.Errorf("unknown upper bound type %v", src.UpperType)
 	}
 
 	return buf, nil
@@ -175,7 +192,7 @@ func (src Tstzrange) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, error) {
 	case Empty:
 		return append(buf, emptyMask), nil
 	default:
-		return nil, errors.Errorf("unknown LowerType: %v", src.LowerType)
+		return nil, fmt.Errorf("unknown LowerType: %v", src.LowerType)
 	}
 
 	switch src.UpperType {
@@ -185,7 +202,7 @@ func (src Tstzrange) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, error) {
 		rangeType |= upperUnboundedMask
 	case Exclusive:
 	default:
-		return nil, errors.Errorf("unknown UpperType: %v", src.UpperType)
+		return nil, fmt.Errorf("unknown UpperType: %v", src.UpperType)
 	}
 
 	buf = append(buf, rangeType)
@@ -201,7 +218,7 @@ func (src Tstzrange) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, error) {
 			return nil, err
 		}
 		if buf == nil {
-			return nil, errors.Errorf("Lower cannot be null unless LowerType is Unbounded")
+			return nil, fmt.Errorf("Lower cannot be null unless LowerType is Unbounded")
 		}
 
 		pgio.SetInt32(buf[sp:], int32(len(buf[sp:])-4))
@@ -216,7 +233,7 @@ func (src Tstzrange) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, error) {
 			return nil, err
 		}
 		if buf == nil {
-			return nil, errors.Errorf("Upper cannot be null unless UpperType is Unbounded")
+			return nil, fmt.Errorf("Upper cannot be null unless UpperType is Unbounded")
 		}
 
 		pgio.SetInt32(buf[sp:], int32(len(buf[sp:])-4))
@@ -241,7 +258,7 @@ func (dst *Tstzrange) Scan(src interface{}) error {
 		return dst.DecodeText(nil, srcCopy)
 	}
 
-	return errors.Errorf("cannot scan %T", src)
+	return fmt.Errorf("cannot scan %T", src)
 }
 
 // Value implements the database/sql/driver Valuer interface.

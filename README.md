@@ -8,7 +8,7 @@ I also strongly recommend you use `pgxpool` rather than `pgx` only. see https://
 ### How to install
 
 ```
-go get -u github.com/edbmanniwood/pgxpoolmock
+go get -u github.com/paradoxedge/pgxpoolmock
 ```
 
 ### How to Use
@@ -20,8 +20,8 @@ package pgxpoolmock_test
 import (
 	"testing"
 
-	"github.com/edbmanniwood/pgxpoolmock"
-	"github.com/edbmanniwood/pgxpoolmock/testdata"
+	"github.com/paradoxedge/pgxpoolmock"
+	"github.com/paradoxedge/pgxpoolmock/testdata"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 )

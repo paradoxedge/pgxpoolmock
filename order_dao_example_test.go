@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/edbmanniwood/pgxpoolmock"
-	"github.com/edbmanniwood/pgxpoolmock/testdata"
 	"github.com/golang/mock/gomock"
 	"github.com/jackc/pgconn"
+	"github.com/paradoxedge/pgxpoolmock"
+	"github.com/paradoxedge/pgxpoolmock/testdata"
 	"github.com/stretchr/testify/assert"
 )
 
