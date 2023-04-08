@@ -3,11 +3,10 @@ package pgtype
 import (
 	"database/sql/driver"
 	"encoding/binary"
-	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgio"
+	errors "golang.org/x/xerrors"
 )
 
 type Date struct {
@@ -27,41 +26,20 @@ func (dst *Date) Set(src interface{}) error {
 		return nil
 	}
 
-	if value, ok := src.(interface{ Get() interface{} }); ok {
-		value2 := value.Get()
-		if value2 != value {
-			return dst.Set(value2)
-		}
-	}
-
 	switch value := src.(type) {
 	case time.Time:
 		*dst = Date{Time: value, Status: Present}
-	case string:
-		return dst.DecodeText(nil, []byte(value))
-	case *time.Time:
-		if value == nil {
-			*dst = Date{Status: Null}
-		} else {
-			return dst.Set(*value)
-		}
-	case *string:
-		if value == nil {
-			*dst = Date{Status: Null}
-		} else {
-			return dst.Set(*value)
-		}
 	default:
 		if originalSrc, ok := underlyingTimeType(src); ok {
 			return dst.Set(originalSrc)
 		}
-		return fmt.Errorf("cannot convert %v to Date", value)
+		return errors.Errorf("cannot convert %v to Date", value)
 	}
 
 	return nil
 }
 
-func (dst Date) Get() interface{} {
+func (dst *Date) Get() interface{} {
 	switch dst.Status {
 	case Present:
 		if dst.InfinityModifier != None {
@@ -81,7 +59,7 @@ func (src *Date) AssignTo(dst interface{}) error {
 		switch v := dst.(type) {
 		case *time.Time:
 			if src.InfinityModifier != None {
-				return fmt.Errorf("cannot assign %v to %T", src, dst)
+				return errors.Errorf("cannot assign %v to %T", src, dst)
 			}
 			*v = src.Time
 			return nil
@@ -89,13 +67,13 @@ func (src *Date) AssignTo(dst interface{}) error {
 			if nextDst, retry := GetAssignToDstType(dst); retry {
 				return src.AssignTo(nextDst)
 			}
-			return fmt.Errorf("unable to assign to %T", dst)
+			return errors.Errorf("unable to assign to %T", dst)
 		}
 	case Null:
 		return NullAssignTo(dst)
 	}
 
-	return fmt.Errorf("cannot decode %#v into %T", src, dst)
+	return errors.Errorf("cannot decode %#v into %T", src, dst)
 }
 
 func (dst *Date) DecodeText(ci *ConnInfo, src []byte) error {
@@ -129,7 +107,7 @@ func (dst *Date) DecodeBinary(ci *ConnInfo, src []byte) error {
 	}
 
 	if len(src) != 4 {
-		return fmt.Errorf("invalid length for date: %v", len(src))
+		return errors.Errorf("invalid length for date: %v", len(src))
 	}
 
 	dayOffset := int32(binary.BigEndian.Uint32(src))
@@ -213,7 +191,7 @@ func (dst *Date) Scan(src interface{}) error {
 		return nil
 	}
 
-	return fmt.Errorf("cannot scan %T", src)
+	return errors.Errorf("cannot scan %T", src)
 }
 
 // Value implements the database/sql/driver Valuer interface.
@@ -229,59 +207,4 @@ func (src Date) Value() (driver.Value, error) {
 	default:
 		return nil, errUndefined
 	}
-}
-
-func (src Date) MarshalJSON() ([]byte, error) {
-	switch src.Status {
-	case Null:
-		return []byte("null"), nil
-	case Undefined:
-		return nil, errUndefined
-	}
-
-	if src.Status != Present {
-		return nil, errBadStatus
-	}
-
-	var s string
-
-	switch src.InfinityModifier {
-	case None:
-		s = src.Time.Format("2006-01-02")
-	case Infinity:
-		s = "infinity"
-	case NegativeInfinity:
-		s = "-infinity"
-	}
-
-	return json.Marshal(s)
-}
-
-func (dst *Date) UnmarshalJSON(b []byte) error {
-	var s *string
-	err := json.Unmarshal(b, &s)
-	if err != nil {
-		return err
-	}
-
-	if s == nil {
-		*dst = Date{Status: Null}
-		return nil
-	}
-
-	switch *s {
-	case "infinity":
-		*dst = Date{Status: Present, InfinityModifier: Infinity}
-	case "-infinity":
-		*dst = Date{Status: Present, InfinityModifier: -Infinity}
-	default:
-		t, err := time.ParseInLocation("2006-01-02", *s, time.UTC)
-		if err != nil {
-			return err
-		}
-
-		*dst = Date{Time: t, Status: Present}
-	}
-
-	return nil
 }

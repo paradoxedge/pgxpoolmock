@@ -10,8 +10,8 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	pgconn "github.com/jackc/pgconn"
-	pgx "github.com/jackc/pgx/v4"
-	pgxpool "github.com/jackc/pgx/v4/pgxpool"
+	pgx "github.com/jackc/pgx/v5"
+	pgxpool "github.com/jackc/pgx/v5/pgxpool"
 )
 
 // MockPgxPool is a mock of PgxPool interface.
@@ -177,19 +177,19 @@ func (mr *MockPgxPoolMockRecorder) Query(arg0, arg1 interface{}, arg2 ...interfa
 }
 
 // QueryFunc mocks base method.
-func (m *MockPgxPool) QueryFunc(arg0 context.Context, arg1 string, arg2, arg3 []interface{}, arg4 func(pgx.QueryFuncRow) error) (pgconn.CommandTag, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryFunc", arg0, arg1, arg2, arg3, arg4)
-	ret0, _ := ret[0].(pgconn.CommandTag)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
+// func (m *MockPgxPool) QueryFunc(arg0 context.Context, arg1 string, arg2, arg3 []interface{}, arg4 func(pgx.QueryFuncRow) error) (pgconn.CommandTag, error) {
+// 	m.ctrl.T.Helper()
+// 	ret := m.ctrl.Call(m, "QueryFunc", arg0, arg1, arg2, arg3, arg4)
+// 	ret0, _ := ret[0].(pgconn.CommandTag)
+// 	ret1, _ := ret[1].(error)
+// 	return ret0, ret1
+// }
 
 // QueryFunc indicates an expected call of QueryFunc.
-func (mr *MockPgxPoolMockRecorder) QueryFunc(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryFunc", reflect.TypeOf((*MockPgxPool)(nil).QueryFunc), arg0, arg1, arg2, arg3, arg4)
-}
+// func (mr *MockPgxPoolMockRecorder) QueryFunc(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+// 	mr.mock.ctrl.T.Helper()
+// 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryFunc", reflect.TypeOf((*MockPgxPool)(nil).QueryFunc), arg0, arg1, arg2, arg3, arg4)
+// }
 
 // QueryRow mocks base method.
 func (m *MockPgxPool) QueryRow(arg0 context.Context, arg1 string, arg2 ...interface{}) pgx.Row {

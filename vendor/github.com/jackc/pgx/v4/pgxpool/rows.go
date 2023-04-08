@@ -1,7 +1,6 @@
 package pgxpool
 
 import (
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx/v4"
 )
@@ -12,12 +11,10 @@ type errRows struct {
 
 func (errRows) Close()                                         {}
 func (e errRows) Err() error                                   { return e.err }
-func (errRows) CommandTag() pgconn.CommandTag                  { return nil }
 func (errRows) FieldDescriptions() []pgproto3.FieldDescription { return nil }
 func (errRows) Next() bool                                     { return false }
 func (e errRows) Scan(dest ...interface{}) error               { return e.err }
 func (e errRows) Values() ([]interface{}, error)               { return nil, e.err }
-func (e errRows) RawValues() [][]byte                          { return nil }
 
 type errRow struct {
 	err error
@@ -44,10 +41,6 @@ func (rows *poolRows) Err() error {
 		return rows.err
 	}
 	return rows.r.Err()
-}
-
-func (rows *poolRows) CommandTag() pgconn.CommandTag {
-	return rows.r.CommandTag()
 }
 
 func (rows *poolRows) FieldDescriptions() []pgproto3.FieldDescription {
@@ -80,10 +73,6 @@ func (rows *poolRows) Values() ([]interface{}, error) {
 		rows.Close()
 	}
 	return values, err
-}
-
-func (rows *poolRows) RawValues() [][]byte {
-	return rows.r.RawValues()
 }
 
 type poolRow struct {

@@ -2,8 +2,9 @@ package pgtype
 
 import (
 	"database/sql/driver"
-	"fmt"
 	"net"
+
+	errors "golang.org/x/xerrors"
 )
 
 // Network address family is dependent on server socket.h value for AF_INET.
@@ -26,59 +27,32 @@ func (dst *Inet) Set(src interface{}) error {
 		return nil
 	}
 
-	if value, ok := src.(interface{ Get() interface{} }); ok {
-		value2 := value.Get()
-		if value2 != value {
-			return dst.Set(value2)
-		}
-	}
-
 	switch value := src.(type) {
 	case net.IPNet:
 		*dst = Inet{IPNet: &value, Status: Present}
+	case *net.IPNet:
+		*dst = Inet{IPNet: value, Status: Present}
 	case net.IP:
-		if len(value) == 0 {
-			*dst = Inet{Status: Null}
-		} else {
-			bitCount := len(value) * 8
-			mask := net.CIDRMask(bitCount, bitCount)
-			*dst = Inet{IPNet: &net.IPNet{Mask: mask, IP: value}, Status: Present}
-		}
+		bitCount := len(value) * 8
+		mask := net.CIDRMask(bitCount, bitCount)
+		*dst = Inet{IPNet: &net.IPNet{Mask: mask, IP: value}, Status: Present}
 	case string:
 		_, ipnet, err := net.ParseCIDR(value)
 		if err != nil {
 			return err
 		}
 		*dst = Inet{IPNet: ipnet, Status: Present}
-	case *net.IPNet:
-		if value == nil {
-			*dst = Inet{Status: Null}
-		} else {
-			return dst.Set(*value)
-		}
-	case *net.IP:
-		if value == nil {
-			*dst = Inet{Status: Null}
-		} else {
-			return dst.Set(*value)
-		}
-	case *string:
-		if value == nil {
-			*dst = Inet{Status: Null}
-		} else {
-			return dst.Set(*value)
-		}
 	default:
 		if originalSrc, ok := underlyingPtrType(src); ok {
 			return dst.Set(originalSrc)
 		}
-		return fmt.Errorf("cannot convert %v to Inet", value)
+		return errors.Errorf("cannot convert %v to Inet", value)
 	}
 
 	return nil
 }
 
-func (dst Inet) Get() interface{} {
+func (dst *Inet) Get() interface{} {
 	switch dst.Status {
 	case Present:
 		return dst.IPNet
@@ -103,7 +77,7 @@ func (src *Inet) AssignTo(dst interface{}) error {
 			return nil
 		case *net.IP:
 			if oneCount, bitCount := src.IPNet.Mask.Size(); oneCount != bitCount {
-				return fmt.Errorf("cannot assign %v to %T", src, dst)
+				return errors.Errorf("cannot assign %v to %T", src, dst)
 			}
 			*v = make(net.IP, len(src.IPNet.IP))
 			copy(*v, src.IPNet.IP)
@@ -112,13 +86,13 @@ func (src *Inet) AssignTo(dst interface{}) error {
 			if nextDst, retry := GetAssignToDstType(dst); retry {
 				return src.AssignTo(nextDst)
 			}
-			return fmt.Errorf("unable to assign to %T", dst)
+			return errors.Errorf("unable to assign to %T", dst)
 		}
 	case Null:
 		return NullAssignTo(dst)
 	}
 
-	return fmt.Errorf("cannot decode %#v into %T", src, dst)
+	return errors.Errorf("cannot decode %#v into %T", src, dst)
 }
 
 func (dst *Inet) DecodeText(ci *ConnInfo, src []byte) error {
@@ -156,7 +130,7 @@ func (dst *Inet) DecodeBinary(ci *ConnInfo, src []byte) error {
 	}
 
 	if len(src) != 8 && len(src) != 20 {
-		return fmt.Errorf("Received an invalid size for a inet: %d", len(src))
+		return errors.Errorf("Received an invalid size for a inet: %d", len(src))
 	}
 
 	// ignore family
@@ -201,7 +175,7 @@ func (src Inet) EncodeBinary(ci *ConnInfo, buf []byte) ([]byte, error) {
 	case net.IPv6len:
 		family = defaultAFInet6
 	default:
-		return nil, fmt.Errorf("Unexpected IP length: %v", len(src.IPNet.IP))
+		return nil, errors.Errorf("Unexpected IP length: %v", len(src.IPNet.IP))
 	}
 
 	buf = append(buf, family)
@@ -233,7 +207,7 @@ func (dst *Inet) Scan(src interface{}) error {
 		return dst.DecodeText(nil, srcCopy)
 	}
 
-	return fmt.Errorf("cannot scan %T", src)
+	return errors.Errorf("cannot scan %T", src)
 }
 
 // Value implements the database/sql/driver Valuer interface.

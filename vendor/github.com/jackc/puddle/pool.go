@@ -29,7 +29,6 @@ type Resource struct {
 	value        interface{}
 	pool         *Pool
 	creationTime time.Time
-	lastUsedNano int64
 	status       byte
 }
 
@@ -46,16 +45,7 @@ func (res *Resource) Release() {
 	if res.status != resourceStatusAcquired {
 		panic("tried to release resource that is not acquired")
 	}
-	res.pool.releaseAcquiredResource(res, nanotime())
-}
-
-// ReleaseUnused returns the resource to the pool without updating when it was last used used. i.e. LastUsedNanotime
-// will not change. res must not be subsequently used.
-func (res *Resource) ReleaseUnused() {
-	if res.status != resourceStatusAcquired {
-		panic("tried to release resource that is not acquired")
-	}
-	res.pool.releaseAcquiredResource(res, res.lastUsedNano)
+	res.pool.releaseAcquiredResource(res)
 }
 
 // Destroy returns the resource to the pool for destruction. res must not be
@@ -64,7 +54,7 @@ func (res *Resource) Destroy() {
 	if res.status != resourceStatusAcquired {
 		panic("tried to destroy resource that is not acquired")
 	}
-	go res.pool.destroyAcquiredResource(res)
+	res.pool.destroyAcquiredResource(res)
 }
 
 // Hijack assumes ownership of the resource from the pool. Caller is responsible
@@ -82,27 +72,6 @@ func (res *Resource) CreationTime() time.Time {
 		panic("tried to access resource that is not acquired or hijacked")
 	}
 	return res.creationTime
-}
-
-// LastUsedNanotime returns when Release was last called on the resource measured in nanoseconds from an arbitrary time
-// (a monotonic time). Returns creation time if Release has never been called. This is only useful to compare with
-// other calls to LastUsedNanotime. In almost all cases, IdleDuration should be used instead.
-func (res *Resource) LastUsedNanotime() int64 {
-	if !(res.status == resourceStatusAcquired || res.status == resourceStatusHijacked) {
-		panic("tried to access resource that is not acquired or hijacked")
-	}
-
-	return res.lastUsedNano
-}
-
-// IdleDuration returns the duration since Release was last called on the resource. This is equivalent to subtracting
-// LastUsedNanotime to the current nanotime.
-func (res *Resource) IdleDuration() time.Duration {
-	if !(res.status == resourceStatusAcquired || res.status == resourceStatusHijacked) {
-		panic("tried to access resource that is not acquired or hijacked")
-	}
-
-	return time.Duration(nanotime() - res.lastUsedNano)
 }
 
 // Pool is a concurrency-safe resource pool.
@@ -144,10 +113,6 @@ func NewPool(constructor Constructor, destructor Destructor, maxSize int32) *Poo
 // Blocks until all resources are returned to pool and destroyed.
 func (p *Pool) Close() {
 	p.cond.L.Lock()
-	if p.closed {
-		p.cond.L.Unlock()
-		return
-	}
 	p.closed = true
 
 	for _, res := range p.idleResources {
@@ -175,9 +140,7 @@ type Stat struct {
 	canceledAcquireCount  int64
 }
 
-// TotalResource returns the total number of resources currently in the pool.
-// The value is the sum of ConstructingResources, AcquiredResources, and
-// IdleResources.
+// TotalResource returns the total number of resources.
 func (s *Stat) TotalResources() int32 {
 	return s.constructingResources + s.acquiredResources + s.idleResources
 }
@@ -188,12 +151,12 @@ func (s *Stat) ConstructingResources() int32 {
 	return s.constructingResources
 }
 
-// AcquiredResources returns the number of currently acquired resources in the pool.
+// AcquiredResources returns the number of acquired resources in the pool.
 func (s *Stat) AcquiredResources() int32 {
 	return s.acquiredResources
 }
 
-// IdleResources returns the number of currently idle resources in the pool.
+// IdleResources returns the number of idle resources in the pool.
 func (s *Stat) IdleResources() int32 {
 	return s.idleResources
 }
@@ -203,7 +166,7 @@ func (s *Stat) MaxResources() int32 {
 	return s.maxResources
 }
 
-// AcquireCount returns the cumulative count of successful acquires from the pool.
+// AcquireCount returns the number of successful acquires from the pool.
 func (s *Stat) AcquireCount() int64 {
 	return s.acquireCount
 }
@@ -214,14 +177,14 @@ func (s *Stat) AcquireDuration() time.Duration {
 	return s.acquireDuration
 }
 
-// EmptyAcquireCount returns the cumulative count of successful acquires from the pool
+// EmptyAcquireCount returns the number of successful acquires from the pool
 // that waited for a resource to be released or constructed because the pool was
 // empty.
 func (s *Stat) EmptyAcquireCount() int64 {
 	return s.emptyAcquireCount
 }
 
-// CanceledAcquireCount returns the cumulative count of acquires from the pool
+// CanceledAcquireCount returns the number of acquires from the pool
 // that were canceled by a context.
 func (s *Stat) CanceledAcquireCount() int64 {
 	return s.canceledAcquireCount
@@ -258,7 +221,7 @@ func (p *Pool) Stat() *Stat {
 // maximum capacity it will block until a resource is available. ctx can be used
 // to cancel the Acquire.
 func (p *Pool) Acquire(ctx context.Context) (*Resource, error) {
-	startNano := nanotime()
+	startTime := time.Now()
 	p.cond.L.Lock()
 	if doneChan := ctx.Done(); doneChan != nil {
 		select {
@@ -287,7 +250,7 @@ func (p *Pool) Acquire(ctx context.Context) (*Resource, error) {
 				p.emptyAcquireCount += 1
 			}
 			p.acquireCount += 1
-			p.acquireDuration += time.Duration(nanotime() - startNano)
+			p.acquireDuration += time.Now().Sub(startTime)
 			p.cond.L.Unlock()
 			return res, nil
 		}
@@ -296,7 +259,7 @@ func (p *Pool) Acquire(ctx context.Context) (*Resource, error) {
 
 		// If there is room to create a resource do so
 		if len(p.allResources) < int(p.maxSize) {
-			res := &Resource{pool: p, creationTime: time.Now(), lastUsedNano: nanotime(), status: resourceStatusConstructing}
+			res := &Resource{pool: p, creationTime: startTime, status: resourceStatusConstructing}
 			p.allResources = append(p.allResources, res)
 			p.destructWG.Add(1)
 			p.cond.L.Unlock()
@@ -316,7 +279,6 @@ func (p *Pool) Acquire(ctx context.Context) (*Resource, error) {
 				}
 
 				p.cond.L.Unlock()
-				p.cond.Signal()
 				return nil, err
 			}
 
@@ -324,7 +286,7 @@ func (p *Pool) Acquire(ctx context.Context) (*Resource, error) {
 			res.status = resourceStatusAcquired
 			p.emptyAcquireCount += 1
 			p.acquireCount += 1
-			p.acquireDuration += time.Duration(nanotime() - startNano)
+			p.acquireDuration += time.Now().Sub(startTime)
 			p.cond.L.Unlock()
 			return res, nil
 		}
@@ -341,6 +303,10 @@ func (p *Pool) Acquire(ctx context.Context) (*Resource, error) {
 
 			select {
 			case <-ctx.Done():
+				p.cond.L.Lock()
+				p.canceledAcquireCount += 1
+				p.cond.L.Unlock()
+
 				// Allow goroutine waiting for signal to exit. Re-signal since we couldn't
 				// do anything with it. Another goroutine might be waiting.
 				go func() {
@@ -349,9 +315,6 @@ func (p *Pool) Acquire(ctx context.Context) (*Resource, error) {
 					p.cond.L.Unlock()
 				}()
 
-				p.cond.L.Lock()
-				p.canceledAcquireCount += 1
-				p.cond.L.Unlock()
 				return nil, ctx.Err()
 			case <-waitChan:
 			}
@@ -364,10 +327,6 @@ func (p *Pool) Acquire(ctx context.Context) (*Resource, error) {
 // statistics.
 func (p *Pool) AcquireAllIdle() []*Resource {
 	p.cond.L.Lock()
-	if p.closed {
-		p.cond.L.Unlock()
-		return nil
-	}
 
 	for _, res := range p.idleResources {
 		res.status = resourceStatusAcquired
@@ -380,50 +339,11 @@ func (p *Pool) AcquireAllIdle() []*Resource {
 	return resources
 }
 
-// CreateResource constructs a new resource without acquiring it.
-// It goes straight in the IdlePool. It does not check against maxSize.
-// It can be useful to maintain warm resources under little load.
-func (p *Pool) CreateResource(ctx context.Context) error {
-	p.cond.L.Lock()
-	if p.closed {
-		p.cond.L.Unlock()
-		return ErrClosedPool
-	}
-	p.cond.L.Unlock()
-
-	value, err := p.constructResourceValue(ctx)
-	if err != nil {
-		return err
-	}
-
-	res := &Resource{
-		pool:         p,
-		creationTime: time.Now(),
-		status:       resourceStatusIdle,
-		value:        value,
-		lastUsedNano: nanotime(),
-	}
-	p.destructWG.Add(1)
-
-	p.cond.L.Lock()
-	// If closed while constructing resource then destroy it and return an error
-	if p.closed {
-		go p.destructResourceValue(res.value)
-		return ErrClosedPool
-	}
-	p.allResources = append(p.allResources, res)
-	p.idleResources = append(p.idleResources, res)
-	p.cond.L.Unlock()
-
-	return nil
-}
-
 // releaseAcquiredResource returns res to the the pool.
-func (p *Pool) releaseAcquiredResource(res *Resource, lastUsedNano int64) {
+func (p *Pool) releaseAcquiredResource(res *Resource) {
 	p.cond.L.Lock()
 
 	if !p.closed {
-		res.lastUsedNano = lastUsedNano
 		res.status = resourceStatusIdle
 		p.idleResources = append(p.idleResources, res)
 	} else {
@@ -438,9 +358,11 @@ func (p *Pool) releaseAcquiredResource(res *Resource, lastUsedNano int64) {
 // Remove removes res from the pool and closes it. If res is not part of the
 // pool Remove will panic.
 func (p *Pool) destroyAcquiredResource(res *Resource) {
-	p.destructResourceValue(res.value)
 	p.cond.L.Lock()
+
 	p.allResources = removeResource(p.allResources, res)
+	go p.destructResourceValue(res.value)
+
 	p.cond.L.Unlock()
 	p.cond.Signal()
 }

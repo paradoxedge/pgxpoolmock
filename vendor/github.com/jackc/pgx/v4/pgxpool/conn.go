@@ -27,7 +27,7 @@ func (c *Conn) Release() {
 	c.res = nil
 
 	now := time.Now()
-	if conn.IsClosed() || conn.PgConn().IsBusy() || conn.PgConn().TxStatus() != 'I' || (now.Sub(res.CreationTime()) > c.p.maxConnLifetime) {
+	if !conn.IsAlive() || conn.PgConn().TxStatus != 'I' || (now.Sub(res.CreationTime()) > c.p.maxConnLifetime) {
 		res.Destroy()
 		return
 	}
@@ -58,10 +58,6 @@ func (c *Conn) QueryRow(ctx context.Context, sql string, args ...interface{}) pg
 	return c.Conn().QueryRow(ctx, sql, args...)
 }
 
-func (c *Conn) QueryFunc(ctx context.Context, sql string, args []interface{}, scans []interface{}, f func(pgx.QueryFuncRow) error) (pgconn.CommandTag, error) {
-	return c.Conn().QueryFunc(ctx, sql, args, scans, f)
-}
-
 func (c *Conn) SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults {
 	return c.Conn().SendBatch(ctx, b)
 }
@@ -74,20 +70,8 @@ func (c *Conn) Begin(ctx context.Context) (pgx.Tx, error) {
 	return c.Conn().Begin(ctx)
 }
 
-func (c *Conn) BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error) {
-	return c.Conn().BeginTx(ctx, txOptions)
-}
-
-func (c *Conn) BeginFunc(ctx context.Context, f func(pgx.Tx) error) error {
-	return c.Conn().BeginFunc(ctx, f)
-}
-
-func (c *Conn) BeginTxFunc(ctx context.Context, txOptions pgx.TxOptions, f func(pgx.Tx) error) error {
-	return c.Conn().BeginTxFunc(ctx, txOptions, f)
-}
-
-func (c *Conn) Ping(ctx context.Context) error {
-	return c.Conn().Ping(ctx)
+func (c *Conn) BeginEx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error) {
+	return c.Conn().BeginEx(ctx, txOptions)
 }
 
 func (c *Conn) Conn() *pgx.Conn {
